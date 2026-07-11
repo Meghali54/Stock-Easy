@@ -1,7 +1,10 @@
-// frontend/src/services/api.ts
 import axios from "axios";
 
-export const API_BASE_URL = "http://localhost:5000/api";
+// In development: falls back to localhost.
+// In production (Vercel): reads VITE_API_BASE_URL from .env.production
+// which points to the Render backend URL.
+export const API_BASE_URL =
+  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -16,12 +19,8 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Global response handler - if the token is invalid/expired, clear the
-// stale session so the app can fall back to its normal routing (landing
-// page for guests). We deliberately do NOT force-navigate here; that's
-// a hard browser redirect that bypasses React Router and leaves no
-// "back" history entry. AuthContext's own bootstrap/guard logic already
-// handles showing the right screen once `user` becomes null.
+// Clear stale session on 401 but do NOT hard-navigate — let React
+// Router's own guards handle showing the right screen once user is null.
 api.interceptors.response.use(
   (response) => response,
   (error) => {

@@ -25,6 +25,7 @@ import dealerRoutes from "./src/routes/dealerRoutes.js";
 import staffRoutes from "./src/routes/staffRoutes.js";
 import reportRoutes from "./src/routes/reportRoutes.js";
 import aiRoutes from "./src/routes/aiRoutes.js";
+import { startKeepAlive } from "./src/utils/keepAlive.js";
 
 // Connect to MongoDB Atlas
 connectDB();
@@ -66,8 +67,20 @@ if (process.env.NODE_ENV !== "production") {
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // ---- Health Check ----
+// ---- Health Check & Keep-Alive Ping ----
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "Pharma Pulse (Stock Easy) API", time: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    service: "Pharma Pulse (Stock Easy) API",
+    time: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
+// Called by the cron job every 14 minutes to prevent Render free tier
+// from spinning down due to inactivity.
+app.get("/api/ping", (_req, res) => {
+  res.json({ pong: true, time: new Date().toISOString() });
 });
 
 // ---- API Routes ----
@@ -90,4 +103,5 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Pharma Pulse (Stock Easy) API running on port ${PORT}`);
+  startKeepAlive();
 });
