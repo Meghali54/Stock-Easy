@@ -1,8 +1,4 @@
 // MUST be the very first import - loads process.env from .env before
-// any other module (e.g. passport.js, which reads GOOGLE_CLIENT_ID at
-// import time, not inside a function) gets evaluated. ES module imports
-// execute top-to-bottom in file order, so this guarantees env vars are
-// populated before everything that follows.
 import "./src/config/env.js";
 
 import express from "express";
@@ -32,38 +28,45 @@ connectDB();
 
 const app = express();
 
-// ---- Global Middleware ----
-const allowedOrigins = [
-  process.env.CLIENT_ORIGIN,
-  "http://localhost:3000",
-].filter(Boolean);
+// ---- CORS ----
+// Log the allowed origin on startup so we can verify it in Render logs
+console.log("✅ CLIENT_ORIGIN:", process.env.CLIENT_ORIGIN);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, Postman)
+      // Allow requests with no origin (Postman, curl, mobile apps)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+
+      const clientOrigin = process.env.CLIENT_ORIGIN || "";
+
+      // Allow exact match, localhost, or any vercel.app subdomain
+      if (
+        !origin ||
+        origin === clientOrigin ||
+        origin === "http://localhost:3000" ||
+        origin === "http://localhost:5173" ||
+        origin.endsWith(".vercel.app")
+      ) {
         return callback(null, true);
       }
+
+      console.error(`❌ CORS blocked for origin: ${origin}`);
       return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
   })
 );
+
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// express-session is required by Passport's OAuth handshake (it briefly
-// stores state while the browser is redirected to/from Google). The
-// app itself never reads req.session after login - everything past
-// the OAuth callback is stateless JWT, exactly like the rest of the API.
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "pharma-pulse-oauth-handshake-secret",
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 5 * 60 * 1000 }, // only needs to survive the brief redirect round-trip
+    cookie: { maxAge: 5 * 60 * 1000 },
   })
 );
 app.use(passport.initialize());
@@ -73,12 +76,8 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // ---- Static file serving for uploaded verification documents ----
-// Files saved by multer (see uploadMiddleware.js) live in /uploads on
-// disk and are served back out under the same path so the admin panel
-// can render <img>/<a> previews directly from the URL stored on Shop.documents.
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
-// ---- Health Check ----
 // ---- Health Check & Keep-Alive Ping ----
 app.get("/api/health", (req, res) => {
   res.json({
@@ -86,11 +85,10 @@ app.get("/api/health", (req, res) => {
     service: "Pharma Pulse (Stock Easy) API",
     time: new Date().toISOString(),
     uptime: process.uptime(),
+    clientOrigin: process.env.CLIENT_ORIGIN,
   });
 });
 
-// Called by the cron job every 14 minutes to prevent Render free tier
-// from spinning down due to inactivity.
 app.get("/api/ping", (_req, res) => {
   res.json({ pong: true, time: new Date().toISOString() });
 });
