@@ -4,7 +4,10 @@ import axios from "axios";
 // In production (Vercel): reads VITE_API_BASE_URL from .env.production
 // which points to the Render backend URL.
 export const API_BASE_URL =
-  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:5000/api";
+  (import.meta as any).env?.VITE_API_BASE_URL ||
+  (window.location.hostname === "localhost"
+    ? "http://localhost:5000/api"
+    : "https://stock-easy-jwhg.onrender.com/api");
 
 const api = axios.create({
   baseURL: API_BASE_URL,
