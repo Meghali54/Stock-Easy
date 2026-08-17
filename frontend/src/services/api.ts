@@ -1,13 +1,18 @@
 import axios from "axios";
 
-// In development: falls back to localhost.
-// In production (Vercel): reads VITE_API_BASE_URL from .env.production
-// which points to the Render backend URL.
-export const API_BASE_URL =
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  (window.location.hostname === "localhost"
-    ? "http://localhost:5000/api"
-    : "https://stock-easy-jwhg.onrender.com/api");
+// Determine the correct API base URL based on environment.
+// Using window.location.hostname as a reliable runtime check
+// so this works correctly regardless of build-time env vars.
+const getApiBaseUrl = (): string => {
+  // If running locally
+  if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+    return "http://localhost:5000/api";
+  }
+  // In production on Vercel - always use the correct Render backend
+  return "https://stock-easy-jwhg.onrender.com/api";
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -22,8 +27,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Clear stale session on 401 but do NOT hard-navigate — let React
-// Router's own guards handle showing the right screen once user is null.
+// Clear stale session on 401 but do NOT hard-navigate
 api.interceptors.response.use(
   (response) => response,
   (error) => {
