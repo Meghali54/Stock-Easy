@@ -1,208 +1,223 @@
-# Pharma Pulse — Stock Easy
-### Complete Multi-Tenant Pharmacy SaaS Platform
+# **Pharma Pulse — Stock Easy** 💊📈
+
+> **A Complete Multi-Tenant Pharmacy SaaS Platform** featuring **FEFO-based automated inventory allocation**, **CGHS split-billing calculations**, **real-time operational analytics**, and an integrated **AI assistant** powered by grounded live database queries.
 
 ---
 
-## Architecture
+## **📌 Executive Summary**
 
-```
-pharma-pulse-workspace/
-├── backend/          Node.js + Express API (Port 5000)
-└── frontend/         React + Vite + Tailwind UI (Port 3000)
+**Pharma Pulse — Stock Easy** is an end-to-end, multi-tenant **B2B SaaS ecosystem** built to modernize retail pharmacy operations and regulatory compliance. Designed with enterprise-grade **multi-tenancy**, it provides a centralized platform for **store onboarding**, **regulatory verification**, **inventory ledger tracking with strict compliance logic**, **point-of-sale (POS) operations**, and **automated AI insights**.
+
+The platform addresses core pharmaceutical retail friction points:
+* **Strict Expiry & Inventory Tracking:** Enforces **First-Expiry-First-Out (FEFO)** batch selection inside atomic database transactions to eliminate stock waste.
+* **Complex Billing Schemes:** Seamlessly handles Central Government Health Scheme (**CGHS 80/20**) co-pay splits directly at POS checkout.
+* **Context-Aware AI Intelligence:** Delivers natural language query capabilities over real-time operational database states without hallucination risk.
+
+---
+
+## **🛠 Tech Stack**
+
+| **Domain** | **Technologies & Libraries** |
+| :--- | :--- |
+| **Frontend UI** | **React 18**, **Vite**, **TypeScript**, **Tailwind CSS**, **Lucide Icons**, Glassmorphism UI |
+| **Backend & REST APIs** | **Node.js**, **Express.js**, **JavaScript (ES6+)** |
+| **Database & ORM** | **MongoDB Atlas**, **Mongoose** (**ACID Multi-Document Transactions**) |
+| **Authentication & Security** | **JWT (JSON Web Tokens)**, **OAuth 2.0 / Passport.js (Google Integration)** |
+| **AI & Natural Language** | **Custom Grounded RAG Query Engine** (Mongo-Grounded Natural Language Processing) |
+| **DevOps & Tooling** | **Docker**, **Git**, **Nodemon**, **dotenv**, RESTful Architecture |
+
+---
+
+## **📸 System Previews**
+
+| **Platform Suite** | **Interface Preview** |
+| :--- | :--- |
+| **Central Admin Suite**<br>*<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/d7d52269-b93f-4fb3-94dc-50dff9381bfd" />
+| **Point of Sale (POS) Terminal**<br>*(Live Search & CGHS Split Billing)* | <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6e755f5d-9040-4ce5-85d1-b998f515c256" />
+| **Inventory Ledger**<br>*(FEFO Batch & Expiry Management)* | ` <img width="1897" height="891" alt="image" src="https://github.com/user-attachments/assets/fc6bb105-e1b1-4c6a-bf19-758f148a10ae" />
+| **Stock Easy AI Assistant**<br>*(Grounded Natural Language Analytics)* |<img width="1894" height="899" alt="image" src="https://github.com/user-attachments/assets/635d5d9f-59cb-4186-8e37-6004e86da2e8" />
+
+---
+
+## **🚀 Key Architectural Features**
+
+### **1. Multi-Tenant Central Admin & Verification Pipeline**
+* **Tenant Isolation:** Enforces strict logical data segregation across shop domains via indexed **`shopId`** references.
+* **4-Step Onboarding & Regulatory Verification:** Streamlined registration capturing business, **PAN**, **GSTIN**, and **drug license details**, locking access behind a **Pending Lockout Screen** with automated background polling until explicit admin approval.
+* **SaaS Analytics Suite:** Monitors **Global Tenant Count**, **Monthly Recurring Revenue (MRR)**, and platform-wide growth metrics.
+
+### **2. Transactional POS & FEFO Inventory Engine**
+* **ACID Transaction Checkout:** Executes `POST /api/bills/checkout` within **MongoDB session transactions**, ensuring all-or-nothing stock decrements.
+* **Automated FEFO Allocation:** Queries non-expired batches sorted by **`{ expiryDate: 1 }`** and sequentially satisfies line item quantities to ensure regulatory compliance.
+* **CGHS 80/20 Split Billing:** Calculates and documents real-time co-pay partitions (**80% CGHS / 20% Patient share**) recorded within sub-documents for auditability.
+
+### **3. Stock Easy Grounded AI Assistant**
+* **Database-Grounded Querying:** Translates natural language prompts into targeted aggregation queries directly against MongoDB collections.
+* **Contextual Store Insights:** Delivers instant operational visibility into **near-expiry batches**, **daily revenue performance**, and **reorder alerts**.
+
+---
+
+### **🏗 System Architecture**
+
+```mermaid
+graph TD
+    subgraph FRONTEND["Frontend Layer (React + Vite)"]
+        A[Central Admin Suite]
+        B[POS & Inventory UI]
+        C[Stock Easy AI Drawer]
+    end
+
+    subgraph BACKEND["Backend Layer (Node.js + Express)"]
+        D["Auth & Tenant Middleware (JWT + shopId)"]
+        E[Admin Module]
+        F[POS / Billing API]
+        G[AI Query Engine]
+    end
+
+    subgraph DATABASE["Database Layer (MongoDB Atlas)"]
+        H["ACID Session Transactions (FEFO & CGHS)"]
+        I[Live Collection Read Scans]
+        J[(MongoDB Collections)]
+    end
+
+    FRONTEND -->|HTTPS / REST / JSON| BACKEND
+    D --> E
+    D --> F
+    D --> G
+    F --> H
+    G --> I
+    H --> J
+    I --> J
 ```
 
 ---
 
-## Quick Start
+### **🗄️ Database ER Diagram & Schema Design**
 
-### 1 — Prerequisites
-- Node.js 18+
-- A MongoDB Atlas cluster (M0 free tier is sufficient to start)
+```mermaid
+erDiagram
+    SHOPS ||--o{ STAFF : employs
+    SHOPS ||--o{ MEDICINES : owns
+    MEDICINES ||--o{ BATCHES : contains
+    BATCHES ||--o{ BILL_ITEMS : included_in
+
+    SHOPS {
+        string id PK
+        string name
+        string drugLicenseNumber
+        string gstNumber
+        string status
+    }
+    STAFF {
+        string id PK
+        string shopId FK
+        string email
+        string role
+    }
+    MEDICINES {
+        string id PK
+        string shopId FK
+        string name
+        number totalStock
+    }
+    BATCHES {
+        string id PK
+        string medicineId FK
+        string batchNumber
+        date expiryDate
+        number quantityRemaining
+    }
+    BILL_ITEMS {
+        string billId FK
+        string batchId FK
+        number quantity
+    }
+```
 
 ---
 
-### 2 — Backend Setup
+## **🔒 Security & Multi-Tenancy Architecture**
 
-```bash
-cd backend
-npm install
-```
+* **Tenant Isolation:** Data leakage is prevented at the database queries layer. Every API route passes through a **Tenant Context Middleware** that extracts `shopId` from the verified **JWT payload**, appending it to all **Mongoose queries** (`{ shopId: req.user.shopId }`).
+* **ACID Transactions:** High-frequency checkout operations (`POST /api/bills/checkout`) use **MongoDB Client Sessions** to guarantee atomic multi-document writes across `Batches` and `Bills`.
+* **RBAC (Role-Based Access Control):** Differentiates permissions between **Central Admin** (global metrics, tenant approvals) and **Shop Owners/Staff** (POS access, stock updates).
+* **Grounded AI Guardrails:** The **Stock Easy AI Assistant** evaluates user intents via deterministic database aggregations, completely mitigating prompt injection and LLM hallucination risks.
 
-Open `.env` and fill in your values:
+---
+
+
+## **🔄 User Journeys & Workflow**
+
+[ Central Admin Workflow ]
+Seed Admin Login ──► Admin Suite Overview ──► Verification Queue ──► Approve / Reject Pending Shops
+
+[ Shop Owner Onboarding Workflow ]
+Google Sign-In ──► 4-Step Onboarding ──► Pending Lockout Screen ──► Automated Polling ──► Approved Dashboard
+
+[ Active Shop Operations ]
+POS Terminal (FEFO Checkout & CGHS Split) ◄──► Live Inventory Ledger ◄──► Stock Easy AI Insights
+
+
+---
+
+## **🛠 API Architecture & Route Map**
+
+### **🔐 Authentication & Onboarding**
+* **`POST /api/auth/admin/login`** — Central admin credential authentication
+* **`POST /api/auth/google`** — OAuth 2.0 / Mock Google sign-in & user upsert
+* **`POST /api/auth/onboarding`** — Submits 4-step pharmacy registration
+* **`GET /api/auth/me`** — Retrieves current user profile and associated tenant context
+
+### **🛡 Central Admin Suite**
+* **`GET /api/admin/metrics`** — Fetches global platform KPIs and MRR breakdown
+* **`GET /api/admin/verification-queue`** — Retrieves pending tenant applications
+* **`PATCH /api/admin/shops/:id/approve`** — Approves pending pharmacy application
+* **`PATCH /api/admin/shops/:id/reject`** — Rejects application with reason tracking
+* **`PATCH /api/admin/shops/:id/subscription`** — Updates tenant subscription tier
+
+### **📦 Inventory & FEFO Engine**
+* **`GET /api/medicines`** — Lists catalog medicines with total aggregated stock
+* **`GET /api/medicines/search?q=`** — Debounced search endpoint for live POS terminal
+* **`POST /api/batches`** — Creates new inventory batch / Goods Received Note (GRN)
+* **`GET /api/batches?filter=`** — Filters ledger by **Expiring Soon**, **Out of Stock**, or **Dead Stock**
+* **`POST /api/bills/checkout`** — Executes transactional FEFO-based POS checkout
+
+### **🤖 Stock Easy AI Engine**
+* **`POST /api/ai/ask`** — Evaluates grounded natural language queries against operational data
+* **`GET /api/ai/history`** — Fetches historical AI interactions per session
+
+## **⚡ Quick Start Guide**
+
+### **Prerequisites**
+* **Node.js**: `v18.0.0` or higher
+* **MongoDB**: Atlas Cluster (or local replica set supporting transactions)
+
+### **Environment Setup (`backend/.env`)**
 
 ```env
+PORT=5000
+CLIENT_ORIGIN=http://localhost:3000
 MONGO_URI=mongodb+srv://<user>:<password>@<cluster>/pharma-pulse?retryWrites=true&w=majority
-JWT_SECRET=any_long_random_string_here
+JWT_SECRET=your_super_secret_jwt_key_here
+JWT_EXPIRES_IN=7d
 ADMIN_SEED_EMAIL=admin@pharmapulse.com
 ADMIN_SEED_PASSWORD=ChangeMe123!
-CLIENT_ORIGIN=http://localhost:3000
-```
+GOOGLE_AUTH_MODE=mock
+Installation & Execution
+Bash
+# 1. Clone the repository
+git clone [https://github.com/Meghali54/Stock-Easy.git](https://github.com/Meghali54/Stock-Easy.git)
+cd Stock-Easy/pharma-pulse-workspace
 
-Seed the first Central Admin account:
-
-```bash
-node seed.js
-```
-
-Start the API server:
-
-```bash
-npm run dev      # development (nodemon)
-# or
-npm start        # production
-```
-
-Server runs on **http://localhost:5000**
-
----
-
-### 3 — Frontend Setup
-
-```bash
-cd frontend
+# 2. Setup and run Backend
+cd backend
 npm install
-npm run dev
-```
+node seed.js    # Seed initial Central Admin account
+npm run dev     # Starts server on http://localhost:5000
 
-App runs on **http://localhost:3000**
-
----
-
-## User Journeys
-
-### Central Admin
-1. Navigate to **http://localhost:3000/auth**
-2. Click **"Central Admin"** tab
-3. Sign in with the seed credentials (`admin@pharmapulse.com` / `ChangeMe123!`)
-4. You are routed to the **Admin Suite** — 5 pages:
-   - **Overview** — global tenant count, MRR, platform sales, growth charts
-   - **Verification Queue** — approve / reject pending pharmacy applications
-   - **All Tenants** — full shop directory with status + tier filters
-   - **Subscriptions** — MRR breakdown by tier, inline tier updater
-   - **Settings** — admin account info
-
-### Shop Owner (first time)
-1. Navigate to **http://localhost:3000/auth** (default tab: Shop Owner)
-2. Click **"Continue with Google"** → choose any mock profile from the picker
-3. For a **new** profile (or the "New User" option), you are routed to the **4-Step Onboarding Wizard**:
-   - Step 1: Owner details
-   - Step 2: Business & legal data (drug license, PAN, GSTIN, address)
-   - Step 3: Document upload simulators
-   - Step 4: Review & submit
-4. After submission, the **Pending Lockout Screen** appears — no sidebar, no dashboard access. A background poll (every 15s) checks for approval.
-
-### Admin approves the shop
-1. In the Admin panel → **Verification Queue**
-2. Click the pending shop card to expand, click **Approve**
-3. The shop owner's browser (polling) detects the approval and **instantly redirects** to the full 8-page Shop Dashboard
-
-### Shop Owner (returning, approved)
-1. Sign in via Google → routed directly to **/shop/dashboard**
-2. 8 pages available:
-   - **Dashboard** — today's revenue KPIs, 7-day revenue trend, category distribution, near-expiry + low-stock alerts
-   - **POS Terminal** — live medicine search (debounced), cart management, FEFO-based checkout, CGHS 80/20 co-pay split toggle
-   - **Inventory Ledger** — filter tabs (All / Expiring Soon / Out of Stock / Dead Stock), add batch / GRN modal
-   - **Medicine Catalog** — full CRUD for the medicine master list
-   - **Dealers** — supplier management cards
-   - **Sales History** — paginated bill history with expandable item breakdown
-   - **Reports** — date-range analytics (daily trend, top medicines, payment mode pie)
-   - **Staff & Settings** — pre-register staff Google emails, toggle active status
-
-### Stock Easy AI Assistant
-- Click **"Stock Easy AI"** button in the top navbar (shop pages only)
-- Glassmorphism drawer slides in from the right
-- Ask questions in natural language — answers are grounded in live MongoDB data:
-  - "What's expiring soon?" → lists nearest-expiry batches
-  - "How are today's sales?" → queries today's bills
-  - "What's low on stock?" → checks reorder levels vs current stock
-
----
-
-## FEFO Transaction Logic
-
-The `POST /api/bills/checkout` endpoint executes inside a **MongoDB multi-document transaction session**:
-
-1. For each cart item, queries batches where:
-   - `shopId` matches
-   - `medicineId` matches
-   - `quantityRemaining > 0`
-   - `expiryDate > now`
-   - Sorted `{ expiryDate: 1 }` (First-Expiry-First-Out)
-2. Loops through eligible batches, decrementing `quantityRemaining` atomically per batch until the requested quantity is fulfilled
-3. If stock is insufficient for **any** item, the entire transaction is **aborted and rolled back** — all-or-nothing guarantee
-
----
-
-## CGHS Split Billing
-
-When "CGHS Split" is selected in the POS:
-- Default split: 80% CGHS / 20% Patient (configurable per bill)
-- Patient share and CGHS share amounts are calculated and stored on the `Bill` document (`cghsSplit` sub-document)
-- Displayed on the bill receipt in both the POS confirmation screen and Sales History expandable rows
-
----
-
-## Upgrading from Mock Google Auth to Live OAuth
-
-1. Install `passport` + `passport-google-oauth20` in the backend
-2. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`
-3. Replace the body of `POST /api/auth/google` in `authController.js` with a Passport Google strategy callback that passes the real profile object through the same upsert logic
-4. In the frontend `AuthPage.tsx`, replace the mock picker button with a real OAuth redirect to `http://localhost:5000/api/auth/google/redirect`
-
----
-
-## Environment Variables Reference
-
-### Backend `.env`
-| Variable | Description |
-|---|---|
-| `MONGO_URI` | MongoDB Atlas connection string |
-| `JWT_SECRET` | Long random string for signing JWTs |
-| `JWT_EXPIRES_IN` | Token expiry (default: `7d`) |
-| `PORT` | API port (default: `5000`) |
-| `CLIENT_ORIGIN` | Frontend origin for CORS (default: `http://localhost:3000`) |
-| `ADMIN_SEED_EMAIL` | Central admin email for seed script |
-| `ADMIN_SEED_PASSWORD` | Central admin password for seed script |
-| `GOOGLE_AUTH_MODE` | `mock` (default) or `live` |
-
----
-
-## API Route Map
-
-| Method | Route | Description |
-|---|---|---|
-| POST | `/api/auth/admin/login` | Central admin credentials login |
-| POST | `/api/auth/google` | Mock Google sign-in / upsert |
-| POST | `/api/auth/onboarding` | Submit 4-step shop registration |
-| GET | `/api/auth/me` | Get current user + shop |
-| GET | `/api/admin/metrics` | Global platform KPIs |
-| GET | `/api/admin/verification-queue` | Pending shops list |
-| GET | `/api/admin/shops` | All shops (filterable) |
-| PATCH | `/api/admin/shops/:id/approve` | Approve a shop |
-| PATCH | `/api/admin/shops/:id/reject` | Reject a shop with reason |
-| PATCH | `/api/admin/shops/:id/subscription` | Update tier + revenue |
-| GET | `/api/dashboard/summary` | Shop dashboard KPIs |
-| GET | `/api/medicines` | List medicines with stock totals |
-| GET | `/api/medicines/search?q=` | Live POS search |
-| POST | `/api/medicines` | Add medicine |
-| PUT | `/api/medicines/:id` | Update medicine |
-| DELETE | `/api/medicines/:id` | Deactivate medicine |
-| GET | `/api/batches?filter=` | Inventory ledger |
-| GET | `/api/batches/summary` | Tab count badges |
-| POST | `/api/batches` | Add batch / GRN |
-| PUT | `/api/batches/:id` | Update batch |
-| DELETE | `/api/batches/:id` | Delete batch |
-| POST | `/api/bills/checkout` | **FEFO transactional checkout** |
-| GET | `/api/bills` | Paginated bill history |
-| GET | `/api/bills/:id` | Single bill |
-| GET | `/api/dealers` | List dealers |
-| POST | `/api/dealers` | Add dealer |
-| PUT | `/api/dealers/:id` | Update dealer |
-| DELETE | `/api/dealers/:id` | Remove dealer |
-| GET | `/api/staff` | List staff for shop |
-| POST | `/api/staff` | Pre-register staff email |
-| PATCH | `/api/staff/:id/status` | Toggle active status |
-| DELETE | `/api/staff/:id` | Remove staff |
-| GET | `/api/reports/sales` | Sales analytics report |
-| POST | `/api/ai/ask` | Stock Easy AI query |
-| GET | `/api/ai/history` | AI conversation history |
+# 3. Setup and run Frontend (in a new terminal tab)
+cd ../frontend
+npm install
+npm run dev     # Starts application on http://localhost:3000
+📄 License
+Distributed under the MIT License. See LICENSE for details.
