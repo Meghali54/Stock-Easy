@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   IndianRupee,
   ShoppingCart,
@@ -9,6 +9,7 @@ import {
   Truck,
   Pill,
   BarChart2,
+  RefreshCw,
 } from "lucide-react";
 import {
   LineChart,
@@ -39,8 +40,6 @@ const MONTH_NAMES = [
   "Jan","Feb","Mar","Apr","May","Jun",
   "Jul","Aug","Sep","Oct","Nov","Dec",
 ];
-
-// ── Shared sub-components ──────────────────────────────────────────────
 
 const MetricCard: React.FC<{
   label: string;
@@ -122,30 +121,39 @@ const CustomTooltip: React.FC<any> = ({
   );
 };
 
-// ── Main Page ──────────────────────────────────────────────────────────
-
 const ShopDashboardPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [extData, setExtData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Added cache-busting timestamp to prevent stale browser responses
+  const fetchAll = useCallback(async (isManualRefresh = false) => {
+    if (isManualRefresh) setRefreshing(true);
+    try {
+      const timestamp = new Date().getTime();
+      const [dashRes, extRes] = await Promise.all([
+        api.get(`/dashboard/summary?_t=${timestamp}`),
+        api.get(`/dashboard/extended?_t=${timestamp}`),
+      ]);
+      setData(dashRes.data);
+      setExtData(extRes.data);
+    } catch (err) {
+      console.error("Dashboard fetch failed", err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const [dashRes, extRes] = await Promise.all([
-          api.get("/dashboard/summary"),
-          api.get("/dashboard/extended"),
-        ]);
-        setData(dashRes.data);
-        setExtData(extRes.data);
-      } catch (err) {
-        console.error("Dashboard fetch failed", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchAll();
-  }, []);
+
+    // Auto-refresh when user clicks back to Dashboard tab
+    const onFocus = () => fetchAll();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchAll]);
 
   if (loading) {
     return (
@@ -155,7 +163,6 @@ const ShopDashboardPage: React.FC = () => {
     );
   }
 
-  // Data shapes for charts
   const weeklyData = (data?.weeklyTrend || []).map((d: any) => ({
     name: `${d._id.day}/${d._id.month}`,
     Revenue: Math.round(d.revenue),
@@ -189,6 +196,21 @@ const ShopDashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* ── Page Header with Manual Sync Button ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Dashboard</h1>
+          <p className="text-xs text-slate-500">Today's snapshot and real-time business metrics</p>
+        </div>
+        <button
+          onClick={() => fetchAll(true)}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 text-[#0D9488] ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Syncing..." : "Refresh Data"}
+        </button>
+      </div>
 
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -488,7 +510,6 @@ const ShopDashboardPage: React.FC = () => {
           )}
         </div>
       </div>
-
     </div>
   );
 };
