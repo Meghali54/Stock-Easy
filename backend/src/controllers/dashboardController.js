@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Bill from "../models/Bill.js";
 import Batch from "../models/Batch.js";
 import Medicine from "../models/Medicine.js";
@@ -11,7 +12,8 @@ const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
  * @access  Private (shop_owner, pharmacy_staff)
  */
 export const getDashboardSummary = asyncHandler(async (req, res) => {
-  const shopId = req.user.shopId;
+  // Convert string shopId to mongoose ObjectId for Aggregation pipelines
+  const shopId = new mongoose.Types.ObjectId(req.user.shopId);
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -112,7 +114,13 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
           $sum: { $multiply: ["$quantityRemaining", "$purchasePrice"] },
         },
         totalSaleValue: {
-          $sum: { $multiply: ["$quantityRemaining", "$sellingPrice"] },
+          // Handles either salePrice or sellingPrice field fallback
+          $sum: {
+            $multiply: [
+              "$quantityRemaining",
+              { $ifNull: ["$salePrice", "$sellingPrice"] },
+            ],
+          },
         },
       },
     },
@@ -142,7 +150,7 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
  * @access  Private (shop_owner, pharmacy_staff)
  */
 export const getDashboardExtended = asyncHandler(async (req, res) => {
-  const shopId = req.user.shopId;
+  const shopId = new mongoose.Types.ObjectId(req.user.shopId);
   const now = new Date();
   const currentYear = now.getFullYear();
   const previousYear = currentYear - 1;
