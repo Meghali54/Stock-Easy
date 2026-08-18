@@ -6,14 +6,38 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 
+// Safe helper to extract shopId and build ObjectId / String query
+const getShopMatch = (req) => {
+  const rawShop = req.user?.shopId || req.user?.shop || req.user?.id;
+  if (!rawShop) return null;
+
+  const shopIdStr = typeof rawShop === "object" ? rawShop._id?.toString() : rawShop.toString();
+  if (!shopIdStr || !mongoose.Types.ObjectId.isValid(shopIdStr)) return null;
+
+  const shopObjectId = new mongoose.Types.ObjectId(shopIdStr);
+  return { $in: [shopObjectId, shopIdStr] };
+};
+
 /**
  * @desc    Main Dashboard KPIs
  * @route   GET /api/dashboard/summary
  * @access  Private (shop_owner, pharmacy_staff)
  */
 export const getDashboardSummary = asyncHandler(async (req, res) => {
-  // Convert string shopId to mongoose ObjectId for Aggregation pipelines
-  const shopId = new mongoose.Types.ObjectId(req.user.shopId);
+  const shopMatch = getShopMatch(req);
+
+  if (!shopMatch) {
+    return res.status(200).json({
+      todaysSales: { totalRevenue: 0, totalTax: 0, billCount: 0 },
+      weeklyTrend: [],
+      categoryDistribution: [],
+      expiringBatches: [],
+      expiredCount: 0,
+      lowStockItems: [],
+      inventoryValue: { totalCostValue: 0, totalSaleValue: 0 },
+      totalMedicines: 0,
+    });
+  }
 
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -21,8 +45,9 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
   const now = new Date();
   const ninetyDaysFromNow = new Date(now.getTime() + NINETY_DAYS_MS);
 
+  // 1. Today's Sales
   const todaysSalesAgg = await Bill.aggregate([
-    { $match: { shopId, createdAt: { $gte: startOfToday } } },
+    { $match: { shopId: shopMatch, createdAt: { $gte: startOfToday } } },
     {
       $group: {
         _id: null,
@@ -39,11 +64,12 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
     billCount: 0,
   };
 
+  // 2. Weekly Trend
   const sevenDaysAgo = new Date(startOfToday);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
 
   const weeklyTrendAgg = await Bill.aggregate([
-    { $match: { shopId, createdAt: { $gte: sevenDaysAgo } } },
+    { $match: { shopId: shopMatch, createdAt: { $gte: sevenDaysAgo } } },
     {
       $group: {
         _id: {
@@ -57,13 +83,15 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
     { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
   ]);
 
+  // 3. Category Distribution
   const categoryDistribution = await Medicine.aggregate([
-    { $match: { shopId, isActive: true } },
+    { $match: { shopId: shopMatch, isActive: true } },
     { $group: { _id: "$category", count: { $sum: 1 } } },
   ]);
 
+  // 4. Expiring Batches
   const expiringBatches = await Batch.find({
-    shopId,
+    shopId: shopMatch,
     quantityRemaining: { $gt: 0 },
     expiryDate: { $gt: now, $lte: ninetyDaysFromNow },
   })
@@ -72,18 +100,19 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
     .limit(10);
 
   const expiredCount = await Batch.countDocuments({
-    shopId,
+    shopId: shopMatch,
     quantityRemaining: { $gt: 0 },
     expiryDate: { $lt: now },
   });
 
-  const allMedicines = await Medicine.find({ shopId, isActive: true });
+  // 5. Stock & Low Stock
+  const allMedicines = await Medicine.find({ shopId: shopMatch, isActive: true });
   const medicineIds = allMedicines.map((m) => m._id);
 
   const stockAgg = await Batch.aggregate([
     {
       $match: {
-        shopId,
+        shopId: shopMatch,
         medicineId: { $in: medicineIds },
         quantityRemaining: { $gt: 0 },
         expiryDate: { $gt: now },
@@ -105,20 +134,20 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
     .filter((m) => m.currentStock <= m.reorderLevel)
     .slice(0, 10);
 
+  // 6. Inventory Value
   const inventoryValueAgg = await Batch.aggregate([
-    { $match: { shopId, quantityRemaining: { $gt: 0 } } },
+    { $match: { shopId: shopMatch, quantityRemaining: { $gt: 0 } } },
     {
       $group: {
         _id: null,
         totalCostValue: {
-          $sum: { $multiply: ["$quantityRemaining", "$purchasePrice"] },
+          $sum: { $multiply: ["$quantityRemaining", { $ifNull: ["$purchasePrice", 0] }] },
         },
         totalSaleValue: {
-          // Handles either salePrice or sellingPrice field fallback
           $sum: {
             $multiply: [
               "$quantityRemaining",
-              { $ifNull: ["$salePrice", "$sellingPrice"] },
+              { $ifNull: ["$salePrice", { $ifNull: ["$sellingPrice", 0] }] },
             ],
           },
         },
@@ -144,13 +173,21 @@ export const getDashboardSummary = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Extended KPI charts — dealer distribution, monthly medicine
- *          purchase quantities, month-wise sales year-over-year comparison
+ * @desc    Extended KPI charts — dealer distribution, monthly medicine purchase, sales YoY
  * @route   GET /api/dashboard/extended
  * @access  Private (shop_owner, pharmacy_staff)
  */
 export const getDashboardExtended = asyncHandler(async (req, res) => {
-  const shopId = new mongoose.Types.ObjectId(req.user.shopId);
+  const shopMatch = getShopMatch(req);
+
+  if (!shopMatch) {
+    return res.json({
+      dealerDistribution: [],
+      monthlyMedicinePurchase: [],
+      monthlySalesComparison: [],
+    });
+  }
+
   const now = new Date();
   const currentYear = now.getFullYear();
   const previousYear = currentYear - 1;
@@ -159,7 +196,7 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
   const dealerDistribution = await Batch.aggregate([
     {
       $match: {
-        shopId,
+        shopId: shopMatch,
         quantityRemaining: { $gt: 0 },
         dealerId: { $ne: null },
       },
@@ -169,7 +206,7 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
         _id: "$dealerId",
         batchCount: { $sum: 1 },
         totalValue: {
-          $sum: { $multiply: ["$quantityRemaining", "$purchasePrice"] },
+          $sum: { $multiply: ["$quantityRemaining", { $ifNull: ["$purchasePrice", 0] }] },
         },
       },
     },
@@ -186,7 +223,7 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
       $project: {
         dealerName: { $ifNull: ["$dealer.name", "Unknown Dealer"] },
         batchCount: 1,
-        totalValue: { $round: ["$totalValue", 2] },
+        totalValue: { $round: [{ $ifNull: ["$totalValue", 0] }, 2] },
       },
     },
     { $sort: { totalValue: -1 } },
@@ -194,15 +231,12 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
   ]);
 
   // 2. Month-wise medicine purchase quantity (last 6 months)
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-  sixMonthsAgo.setDate(1);
-  sixMonthsAgo.setHours(0, 0, 0, 0);
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
   const monthlyMedicinePurchase = await Batch.aggregate([
     {
       $match: {
-        shopId,
+        shopId: shopMatch,
         createdAt: { $gte: sixMonthsAgo },
       },
     },
@@ -212,19 +246,19 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
           year: { $year: "$createdAt" },
           month: { $month: "$createdAt" },
         },
-        totalQuantity: { $sum: "$quantityReceived" },
+        totalQuantity: { $sum: { $ifNull: ["$quantityReceived", "$quantity"] } },
       },
     },
     { $sort: { "_id.year": 1, "_id.month": 1 } },
   ]);
 
   // 3. Month-wise sales comparison (current year vs previous year)
-  const startOfPreviousYear = new Date(`${previousYear}-01-01T00:00:00.000Z`);
+  const startOfPreviousYear = new Date(previousYear, 0, 1);
 
   const allMonthlySales = await Bill.aggregate([
     {
       $match: {
-        shopId,
+        shopId: shopMatch,
         createdAt: { $gte: startOfPreviousYear },
       },
     },
@@ -245,12 +279,16 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
   for (let m = 1; m <= 12; m++) {
     salesMap[m] = { currentYear: 0, previousYear: 0 };
   }
+
   allMonthlySales.forEach((entry) => {
-    const month = entry._id.month;
-    if (entry._id.year === currentYear) {
-      salesMap[month].currentYear = entry.revenue;
-    } else if (entry._id.year === previousYear) {
-      salesMap[month].previousYear = entry.revenue;
+    const month = entry._id?.month;
+    const year = entry._id?.year;
+    if (month && year) {
+      if (year === currentYear) {
+        salesMap[month].currentYear = entry.revenue || 0;
+      } else if (year === previousYear) {
+        salesMap[month].previousYear = entry.revenue || 0;
+      }
     }
   });
 
