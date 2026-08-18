@@ -11,7 +11,10 @@ import {
 
 const router = express.Router();
 
-router.use(protect, authorize("shop_owner", "pharmacy_staff"), requireApprovedShop);
+// Option A: Apply middlewares sequentially
+router.use(protect);
+router.use(authorize("shop_owner", "pharmacy_staff", "central_admin"));
+router.use(requireApprovedShop);
 
 router.get("/summary", getDashboardSummary);
 router.get("/extended", getDashboardExtended);
