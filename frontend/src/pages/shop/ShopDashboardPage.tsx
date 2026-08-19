@@ -128,24 +128,28 @@ const ShopDashboardPage: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   // Added cache-busting timestamp to prevent stale browser responses
-  const fetchAll = useCallback(async (isManualRefresh = false) => {
-    if (isManualRefresh) setRefreshing(true);
-    try {
-      const timestamp = new Date().getTime();
-      const [dashRes, extRes] = await Promise.all([
-        api.get(`/dashboard/summary?_t=${timestamp}`),
-        api.get(`/dashboard/extended?_t=${timestamp}`),
-      ]);
-      setData(dashRes.data);
-      setExtData(extRes.data);
-    } catch (err) {
-      console.error("Dashboard fetch failed", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  const fetchAll = async () => {
+  try {
+    const [dashResult, extResult] = await Promise.allSettled([
+      api.get("/dashboard/summary"),
+      api.get("/dashboard/extended"),
+    ]);
 
+    if (dashResult.status === "fulfilled") {
+      setData(dashResult.value.data);
+    } else {
+      console.error("Summary failed:", dashResult.reason?.message);
+    }
+
+    if (extResult.status === "fulfilled") {
+      setExtData(extResult.value.data);
+    } else {
+      console.error("Extended failed:", extResult.reason?.message);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
   useEffect(() => {
     fetchAll();
 
