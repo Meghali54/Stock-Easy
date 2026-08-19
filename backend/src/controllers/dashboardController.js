@@ -218,7 +218,7 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
         as: "dealer",
       },
     },
-    { $unwind: { path: "$dealer", preserveNullAndEmpty: true } },
+    { $unwind: { path: "$dealer", preserveNullAndEmptyArrays: true } },
     {
       $project: {
         dealerName: { $ifNull: ["$dealer.name", "Unknown Dealer"] },
@@ -276,21 +276,18 @@ export const getDashboardExtended = asyncHandler(async (req, res) => {
 
   // Reshape into { month, currentYear, previousYear }
   const salesMap = {};
-  for (let m = 1; m <= 12; m++) {
-    salesMap[m] = { currentYear: 0, previousYear: 0 };
+for (let m = 1; m <= 12; m++) {
+  salesMap[m] = { currentYear: 0, previousYear: 0 };
+}
+allMonthlySales.forEach((entry) => {
+  const month = entry._id.month;
+  if (!salesMap[month]) salesMap[month] = { currentYear: 0, previousYear: 0 };
+  if (entry._id.year === currentYear) {
+    salesMap[month].currentYear = entry.revenue;
+  } else if (entry._id.year === previousYear) {
+    salesMap[month].previousYear = entry.revenue;
   }
-
-  allMonthlySales.forEach((entry) => {
-    const month = entry._id?.month;
-    const year = entry._id?.year;
-    if (month && year) {
-      if (year === currentYear) {
-        salesMap[month].currentYear = entry.revenue || 0;
-      } else if (year === previousYear) {
-        salesMap[month].previousYear = entry.revenue || 0;
-      }
-    }
-  });
+});
 
   const currentMonth = now.getMonth() + 1;
   const monthlySalesComparison = Object.entries(salesMap)
