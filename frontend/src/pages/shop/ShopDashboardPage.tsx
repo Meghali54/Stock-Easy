@@ -41,6 +41,8 @@ const MONTH_NAMES = [
   "Jul","Aug","Sep","Oct","Nov","Dec",
 ];
 
+// ── Shared sub-components ──────────────────────────────────────────────
+
 const MetricCard: React.FC<{
   label: string;
   value: string | number;
@@ -121,43 +123,48 @@ const CustomTooltip: React.FC<any> = ({
   );
 };
 
+// ── Main Page ──────────────────────────────────────────────────────────
+
 const ShopDashboardPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [extData, setExtData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Added cache-busting timestamp to prevent stale browser responses
-  const fetchAll = async () => {
-  try {
-    const [dashResult, extResult] = await Promise.allSettled([
-      api.get("/dashboard/summary"),
-      api.get("/dashboard/extended"),
-    ]);
+  const fetchAll = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [dashResult, extResult] = await Promise.allSettled([
+        api.get("/dashboard/summary"),
+        api.get("/dashboard/extended"),
+      ]);
 
-    if (dashResult.status === "fulfilled") {
-      setData(dashResult.value.data);
-    } else {
-      console.error("Summary failed:", dashResult.reason?.message);
-    }
+      if (dashResult.status === "fulfilled") {
+        setData(dashResult.value.data);
+      } else {
+        console.error("Summary failed:", (dashResult as PromiseRejectedResult).reason?.message);
+      }
 
-    if (extResult.status === "fulfilled") {
-      setExtData(extResult.value.data);
-    } else {
-      console.error("Extended failed:", extResult.reason?.message);
+      if (extResult.status === "fulfilled") {
+        setExtData(extResult.value.data);
+      } else {
+        console.error("Extended failed:", (extResult as PromiseRejectedResult).reason?.message);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  }, []);
+
   useEffect(() => {
     fetchAll();
 
-    // Auto-refresh when user clicks back to Dashboard tab
+    // Re-fetch when user switches back to this tab
     const onFocus = () => fetchAll();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [fetchAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (
@@ -166,6 +173,8 @@ const ShopDashboardPage: React.FC = () => {
       </div>
     );
   }
+
+  // ── Chart data shapes ──────────────────────────────────────────────
 
   const weeklyData = (data?.weeklyTrend || []).map((d: any) => ({
     name: `${d._id.day}/${d._id.month}`,
@@ -200,23 +209,30 @@ const ShopDashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* ── Page Header with Manual Sync Button ── */}
+
+      {/* ── Page header with refresh button ── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-xs text-slate-500">Today's snapshot and real-time business metrics</p>
+          <p className="text-xs text-slate-500">
+            Today's snapshot and real-time business metrics
+          </p>
         </div>
         <button
-          onClick={() => fetchAll(true)}
+          onClick={fetchAll}
           disabled={refreshing}
           className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
         >
-          <RefreshCw className={`h-3.5 w-3.5 text-[#0D9488] ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-3.5 w-3.5 text-[#0D9488] ${
+              refreshing ? "animate-spin" : ""
+            }`}
+          />
           {refreshing ? "Syncing..." : "Refresh Data"}
         </button>
       </div>
 
-      {/* ── KPI row ── */}
+      {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <MetricCard
           label="Today's Revenue"
@@ -265,9 +281,23 @@ const ShopDashboardPage: React.FC = () => {
                 margin={{ top: 5, right: 10, left: -20, bottom: 5 }}
               >
                 <defs>
-                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0D9488" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#0D9488" stopOpacity={0} />
+                  <linearGradient
+                    id="revenueGrad"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="5%"
+                      stopColor="#0D9488"
+                      stopOpacity={0.15}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor="#0D9488"
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -365,7 +395,7 @@ const ShopDashboardPage: React.FC = () => {
         )}
       </ChartCard>
 
-      {/* ── Row 3: Month-wise medicine purchase + month-wise sales comparison ── */}
+      {/* ── Row 3: Month-wise medicine purchase + sales comparison ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard
           title="Month-wise Medicine Purchase (Last 6 Months)"
@@ -381,7 +411,11 @@ const ShopDashboardPage: React.FC = () => {
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="Quantity" radius={[4, 4, 0, 0]} name="Units Purchased">
+                <Bar
+                  dataKey="Quantity"
+                  radius={[4, 4, 0, 0]}
+                  name="Units Purchased"
+                >
                   {monthMedData.map((_: any, i: number) => (
                     <Cell
                       key={i}
@@ -514,6 +548,7 @@ const ShopDashboardPage: React.FC = () => {
           )}
         </div>
       </div>
+
     </div>
   );
 };
